@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+
+def branches(environments, args=nil)
+  `git branch #{args}`.split("\n").map { |line| line.strip.gsub('* ', '') } - environments.keys
+end
+
+def features(args=[])
+  features_envs = `git config --get-regexp featuresenv`
+
+  if features_envs.empty?
+    puts <<-EOF
+
+No environments have been defined for this repository.
+------------------------------------------------------
+
+Define some environments for your features liek the following:
+
+  git features add <branch> <identifier>
+
+e.g.
+
+  git features add master M
+
+  EOF
+  exit(1)
+  end
+
+  environments = features_envs.split("\n").inject({}) do |envs, feature_env|
+    matches = feature_env.match(/branch\.(.*?)\.featuresenv\s(.*)/)
+    envs[matches[1]] = matches[2]
+    envs
+  end
+
+  merged = environments.inject({}) do |hash,(env,str)|
+    hash[env] = branches(environments, "--merged #{env}")
+    hash
+  end
+
+  branches(environments).sort.each do |branch|
+    environments.each { |env, str| print merged[env].include?(branch) ? str : ("\e[1;30m-\e[0m" * str.length) }
+    puts "  #{branch}"
+  end
+end
+
+def features_add(args=[])
+  branch, identifier = *args
+  `git config branch.#{branch}.featuresenv #{identifier}`
+
+  puts "features: set feature environment for '#{branch}' branch to '#{identifier}'."
+end
+
+def features_remove(args=[])
+  branch = args[0]
+  `git config --unset branch.#{branch}.featuresenv`
+
+  puts "features: removed feature environment for '#{branch}'."
+end
+
+case ARGV.shift
+when 'add'
+  features_add(ARGV)
+when 'remove'
+  features_remove(ARGV)
+else
+  features
+end
+
+exit(0)
